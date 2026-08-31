@@ -1,0 +1,395 @@
+/* Layout only — no colors/fonts/branding beyond the user-chosen
+   theme/font below, restyle later. */
+
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  --bg: #fff;
+  --fg: #111;
+  --app-font: system-ui, sans-serif;
+}
+
+:root[data-theme="dark"] {
+  --bg: #111;
+  --fg: #eee;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] {
+    --bg: #111;
+    --fg: #eee;
+  }
+}
+
+:root[data-font="serif"] {
+  --app-font: Georgia, serif;
+}
+
+:root[data-font="mono"] {
+  --app-font: ui-monospace, monospace;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--app-font);
+}
+
+/* Form controls don't inherit font-family from body by default in any
+   browser — without this, buttons/inputs/selects across the sidebar,
+   header, footer and dialogs stay stuck on the browser's UI font. */
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+/* CodeMirror injects its own "font-family: monospace" rule on these at
+   runtime (after this stylesheet loads), so a plain .cm-editor selector
+   loses the cascade tie — !important forces the chosen font through. */
+.cm-editor,
+.cm-editor .cm-content,
+.cm-editor .cm-scroller,
+.cm-editor .cm-line {
+  font-family: var(--app-font) !important;
+}
+
+#app {
+  height: 100%;
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.field-error:empty,
+.form-error:empty {
+  display: none;
+}
+
+/* Auth views center themselves as a small card. Unused while auth is
+   hidden (see main.ts) but kept working for when it's re-enabled. */
+.auth-view,
+.dashboard-view {
+  min-height: 100%;
+  width: 100%;
+  max-width: 360px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1rem;
+}
+
+/* Editor app shell */
+.app-shell {
+  height: 100%;
+  display: flex;
+  flex-direction: row;
+}
+
+.app-shell[data-sidebar-hidden="true"] .sidebar {
+  display: none;
+}
+
+.sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  height: 100%;
+  overflow: auto;
+  border-right: 1px solid;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-toolbar {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.5rem;
+}
+
+.sidebar-toolbar button {
+  flex: 1;
+}
+
+#note-search {
+  margin: 0 0.5rem 0.5rem;
+}
+
+.note-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1;
+  overflow: auto;
+}
+
+.note-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0 0.25rem;
+}
+
+.note-list li[aria-current="true"] {
+  font-weight: bold;
+}
+
+.note-item {
+  flex: 1;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note-rename-input {
+  flex: 1;
+  width: 100%;
+}
+
+.sidebar-footer {
+  padding: 0.35rem 0.5rem;
+  border-top: 1px solid;
+}
+
+.sidebar-auth {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  border-top: 1px solid;
+}
+
+.main-column {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem 1rem;
+}
+
+.mode-switcher {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.save-status {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.status-dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  display: inline-block;
+  background: gray;
+}
+
+.status-dot[data-state="saved"] {
+  background: green;
+}
+
+.status-dot[data-state="saving"] {
+  background: orange;
+}
+
+.app-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.editor-pane,
+.preview-pane {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  overflow: auto;
+}
+
+.editor-pane .cm-editor {
+  height: 100%;
+}
+
+.app-shell[data-mode="editor"] .preview-pane {
+  display: none;
+}
+
+.app-shell[data-mode="preview"] .editor-pane {
+  display: none;
+}
+
+.split-divider {
+  flex: 0 0 6px;
+  cursor: col-resize;
+}
+
+.app-shell:not([data-mode="split"]) .split-divider {
+  display: none;
+}
+
+/* While dragging the divider: stop text selection and pointer-event
+   quirks over the editor/preview panes from interfering with the drag. */
+body.is-resizing-split {
+  cursor: col-resize;
+  user-select: none;
+}
+
+body.is-resizing-split .editor-pane,
+body.is-resizing-split .preview-pane {
+  pointer-events: none;
+}
+
+.app-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.35rem 1rem;
+}
+
+.footer-info {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.sync-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+#shortcuts-dialog,
+#appearance-dialog,
+#auth-dialog,
+#export-dialog {
+  position: relative;
+  max-width: 480px;
+  max-height: 80vh;
+  overflow: auto;
+}
+
+.shortcuts-close {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+}
+
+#shortcuts-dialog table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1rem;
+}
+
+#shortcuts-dialog td,
+#shortcuts-dialog th {
+  text-align: left;
+  padding: 0.15rem 0.5rem;
+}
+
+#toast-container {
+  position: fixed;
+  bottom: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 0.5rem;
+  z-index: 1000;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+#export-note-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 40vh;
+  overflow: auto;
+  margin-bottom: 1rem;
+}
+
+.export-note-item {
+  display: block;
+}
+
+/* PDF export: the print area is off-screen/hidden during normal use, and
+   is the ONLY thing shown when printing — everything else in the app
+   (sidebar, header, footer, dialogs, toasts) is hidden for that pass. */
+#pdf-print-area {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+@media print {
+  #app,
+  #toast-container {
+    display: none !important;
+  }
+
+  #pdf-print-area {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    color: #000;
+    background: #fff;
+    font-family: Georgia, serif;
+  }
+
+  #pdf-print-area pre,
+  #pdf-print-area code {
+    font-family: ui-monospace, monospace;
+    white-space: pre-wrap;
+  }
+
+  #pdf-print-area img {
+    max-width: 100%;
+  }
+}
+
+body.is-dragging-file #app {
+  outline: 3px dashed;
+  outline-offset: -3px;
+}
