@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "md",
+  "name": "md-dev",
   "main": "src/index.ts",
   "compatibility_date": "2026-08-22",
   "ratelimits": [
@@ -31,6 +31,7 @@
   },
   "env": {
     "production": {
+      "name": "md",
       "ratelimits": [
         {
           "name": "AUTH_LIMITER",
