@@ -1,5 +1,5 @@
 import { Marked } from "marked";
-import type { Tokens } from "marked";
+import type { Tokens, TokenizerAndRendererExtension } from "marked";
 import DOMPurify from "dompurify";
 import { parseLocalImageHref } from "../images/model";
 import { escapeHtml } from "../lib/html";
@@ -13,13 +13,36 @@ type RenderState = { codeBlocks: PendingCodeBlock[]; taskIndex: number };
 // render its own fresh set of code blocks / task-checkbox indices.
 let state: RenderState = { codeBlocks: [], taskIndex: 0 };
 
-// Code blocks and task checkboxes can't be rendered synchronously here —
-// Shiki highlighting is async, and marked's block parser never awaits a
-// renderer's return value. So this pass emits placeholders (with an index
-// into `state.codeBlocks`, or a sequential task index) and the hydration
-// pass in render.ts fills them in afterwards.
+// `==text==` isn't part of CommonMark or GFM — marked has no built-in
+// support for it — but it's a common note-taking convention, and the
+// preview already ships CSS for the <mark> it produces.
+const markExtension: TokenizerAndRendererExtension = {
+  name: "mark",
+  level: "inline",
+  start(src) {
+    return src.indexOf("==");
+  },
+  tokenizer(src) {
+    const match = /^==([^=\n]+)==/.exec(src);
+    if (!match) return undefined;
+    return {
+      type: "mark",
+      raw: match[0],
+      text: match[1],
+      tokens: this.lexer.inlineTokens(match[1]),
+    };
+  },
+  renderer(token) {
+    return `<mark>${this.parser.parseInline(token.tokens ?? [])}</mark>`;
+  },
+};
+
+// Code/checkbox renderers emit placeholders (Shiki highlighting is
+// async; marked's renderer isn't) — render.ts hydrates them afterward.
 const marked = new Marked({
   gfm: true,
+  breaks: true, // a single newline is a line break, not a new paragraph
+  extensions: [markExtension],
   renderer: {
     code({ text, lang }: Tokens.Code) {
       const index = state.codeBlocks.push({ text, lang }) - 1;

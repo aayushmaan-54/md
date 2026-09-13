@@ -10,9 +10,9 @@ import {
   moveLineDown,
   moveLineUp,
 } from "@codemirror/commands";
-import { defaultHighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { markdown } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
+import { syntaxThemeExtension } from "./highlight";
 import { tabWidthCompartment, tabWidthExtension } from "./tab-width";
 import type { TabWidthOption } from "./tab-width";
 import { toggleTaskLine } from "./task-toggle";
@@ -49,7 +49,7 @@ export function createEditorExtensions(options: EditorSetupOptions): Extension[]
   return [
     history(),
     EditorView.lineWrapping,
-    syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+    syntaxThemeExtension(document.documentElement.dataset.theme ?? "sage"),
     markdown({ codeLanguages: languages }),
     tabWidthCompartment.of(tabWidthExtension(options.tabWidth)),
     autoSurround(),

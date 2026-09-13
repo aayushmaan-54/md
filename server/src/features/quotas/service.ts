@@ -1,14 +1,9 @@
 import type { Db } from "@/db";
 import { QUOTA_TYPES } from "@/db/schema";
 import { Forbidden } from "@/lib/api-error";
+import { isPostgresErrorCode } from "@/lib/postgres-error";
 import type { Logger } from "@/lib/logger";
 import * as q from "./queries";
-
-const isCheckViolation = (err: unknown): err is { code: "23514" } =>
-  typeof err === "object" &&
-  err !== null &&
-  "code" in err &&
-  err.code === "23514";
 
 export async function reserveImageQuota(
   db: Db,
@@ -33,7 +28,7 @@ export async function reserveImageQuota(
 
     return row.bytes;
   } catch (err) {
-    if (isCheckViolation(err)) {
+    if (isPostgresErrorCode(err, "23514")) {
       logger.warn("image quota exceeded", { userId, bytes });
       throw new Forbidden("Image storage quota exceeded");
     }

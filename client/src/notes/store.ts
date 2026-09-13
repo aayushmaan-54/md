@@ -4,8 +4,16 @@ import type { Note } from "./model";
 import { debounce } from "../lib/debounce";
 import { deleteRemoteNote, pullNotes, pushNotes } from "../api/notes";
 import type { PushNoteInput } from "../api/notes";
+import { findLocalImageIds } from "../images/model";
+import { deleteImageRecord, getImage } from "../storage/images-db";
+import { deleteRemoteImage } from "../api/images";
+import { releaseLocalImageUrl } from "../preview/render";
 
 const SAVE_DEBOUNCE_MS = 400;
+
+// Mirrors server/src/config/constants.ts MAX_NOTES_PER_PUSH, which
+// rejects a larger batch outright — pushAll() chunks to this size.
+const MAX_NOTES_PER_PUSH = 200;
 
 export type SaveState = "saving" | "saved";
 
@@ -85,12 +93,31 @@ export class NotesStore {
     this.pendingDeletes.delete(id);
 
     await deleteNoteRecord(id);
+    this.persistDebouncers.delete(id);
 
     // Best-effort: local delete must succeed regardless of sync state
     // (not logged in, offline, note never pushed => 404). Without this,
     // a note deleted locally would still exist server-side and a later
     // Pull would resurrect it, since Pull only skips ids already local.
     if (note.version > 0) deleteRemoteNote(id).catch(() => {});
+
+    // Clean up images only this note referenced, freeing quota — but
+    // not ones still referenced by another live or pending-delete note.
+    const stillReferenced = new Set<string>();
+    for (const other of this.notes) {
+      for (const imageId of findLocalImageIds(other.content)) stillReferenced.add(imageId);
+    }
+    for (const pending of this.pendingDeletes.values()) {
+      for (const imageId of findLocalImageIds(pending.content)) stillReferenced.add(imageId);
+    }
+
+    for (const imageId of findLocalImageIds(note.content)) {
+      if (stillReferenced.has(imageId)) continue;
+      const image = await getImage(imageId);
+      await deleteImageRecord(imageId);
+      releaseLocalImageUrl(imageId);
+      if (image?.remoteId) deleteRemoteImage(image.remoteId).catch(() => {});
+    }
   }
 
   async importFiles(files: FileList | File[]): Promise<Note[]> {
@@ -149,37 +176,39 @@ export class NotesStore {
 
   // Pushes every local note to the server as a checkpoint. Per-note
   // optimistic concurrency: a note whose local version is behind the
-  // server's is reported as a conflict, the rest of the batch still
-  // lands. See docs/SYNC.md.
+  // server's is reported as a conflict, the rest of the batch still lands.
   async pushAll(): Promise<{ pushed: number; conflicts: number }> {
     if (this.notes.length === 0) return { pushed: 0, conflicts: 0 };
-
-    const inputs: PushNoteInput[] = this.notes.map((note) => ({
-      id: note.id,
-      version: note.version,
-      data: {
-        title: note.title,
-        titleIsManual: note.titleIsManual,
-        content: note.content,
-        createdAt: note.createdAt,
-      },
-    }));
-
-    const { results } = await pushNotes(inputs);
 
     let pushed = 0;
     let conflicts = 0;
 
-    for (const result of results) {
-      const note = this.get(result.id);
-      if (!note) continue;
+    for (let i = 0; i < this.notes.length; i += MAX_NOTES_PER_PUSH) {
+      const batch = this.notes.slice(i, i + MAX_NOTES_PER_PUSH);
+      const inputs: PushNoteInput[] = batch.map((note) => ({
+        id: note.id,
+        version: note.version,
+        data: {
+          title: note.title,
+          titleIsManual: note.titleIsManual,
+          content: note.content,
+          createdAt: note.createdAt,
+        },
+      }));
 
-      if (result.status === "ok") {
-        note.version = result.version;
-        await putNote(note);
-        pushed++;
-      } else {
-        conflicts++;
+      const { results } = await pushNotes(inputs);
+
+      for (const result of results) {
+        const note = this.get(result.id);
+        if (!note) continue;
+
+        if (result.status === "ok") {
+          note.version = result.version;
+          await putNote(note);
+          pushed++;
+        } else {
+          conflicts++;
+        }
       }
     }
 
@@ -187,10 +216,10 @@ export class NotesStore {
     return { pushed, conflicts };
   }
 
-  // Additive merge, per docs/SYNC.md: a note the server has that isn't
-  // known locally becomes a new local note (title-collision gets a
-  // Windows-style " 2" suffix); a note that already exists locally by id
-  // is left untouched — pull never silently overwrites local edits.
+  // Additive merge: a note the server has that isn't known locally becomes
+  // a new local note (title-collision gets a Windows-style " 2" suffix);
+  // a note that already exists locally by id is left untouched — pull
+  // never silently overwrites local edits.
   async pull(): Promise<{ added: number; skipped: number }> {
     const { notes: pulled } = await pullNotes();
     const existingTitles = new Set(this.notes.map((note) => note.title));

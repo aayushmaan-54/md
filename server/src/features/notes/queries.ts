@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import type { Db } from "@/db";
 import { notes } from "@/db/schema";
 
@@ -32,7 +32,8 @@ export const getAllNotes = (db: Db, userId: string) =>
   db
     .select({ id: notes.id, data: notes.data, version: notes.version })
     .from(notes)
-    .where(eq(notes.userId, userId));
+    .where(eq(notes.userId, userId))
+    .orderBy(desc(notes.updatedAt));
 
 export const deleteNote = (db: Db, userId: string, id: string) =>
   db

@@ -1,14 +1,5 @@
-import { relations, sql } from "drizzle-orm";
-import {
-  index,
-  inet,
-  pgTable,
-  text,
-  timestamp,
-  uniqueIndex,
-  uuid,
-  varchar,
-} from "drizzle-orm/pg-core";
+import { relations } from "drizzle-orm";
+import { index, inet, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { users } from "./users";
 import { createdAt, id, userId } from "./constants";
 
@@ -25,10 +16,14 @@ export const sessions = pgTable(
       .notNull()
       .defaultNow(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
   },
   (t) => [
-    uniqueIndex("sessions_tokenhash_unique_idx").on(t.tokenHash),
-    index("sessions_tokenhash_expiresat_idx").on(t.tokenHash, t.expiresAt),
+    // No query filters by userId alone yet — this is FK-column hygiene
+    // (an unindexed FK means a future user-deletion cascade sequential-
+    // scans this table), not a currently-exercised lookup path.
+    index("sessions_userid_idx").on(t.userId),
+    index("sessions_expiresat_idx").on(t.expiresAt),
   ],
 );
 

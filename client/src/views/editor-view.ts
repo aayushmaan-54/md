@@ -1,25 +1,35 @@
-import { createEditorView, loadNoteState, setTabWidth } from "../editor/view";
+import { createEditorView, loadNoteState, setSyntaxTheme, setTabWidth } from "../editor/view";
 import type { TabWidthOption } from "../editor/tab-width";
 import { renderPreview } from "../preview/render";
 import { toggleTaskInSource } from "../preview/tasks";
 import { debounce } from "../lib/debounce";
 import { NotesStore } from "../notes/store";
 import type { SaveState } from "../notes/store";
+import type { Note } from "../notes/model";
 import { exportNotesSeparately, exportNotesZipped } from "../notes/export";
 import { exportNoteToPdf } from "../notes/pdf-export";
+import { importZip } from "../notes/import-zip";
 import { insertPastedImage } from "../images/insert";
 import { escapeHtml } from "../lib/html";
 import { renderSidebar } from "./sidebar-view";
+import { buildShellHtml } from "./editor-view.template";
+import { createConfirmDialog } from "./confirm-dialog";
 import type { SidebarHandles } from "./sidebar-view";
 import { countChars, countWords } from "../lib/text-stats";
-import { applyFont, applyTheme } from "../lib/appearance";
+import { applyFont, applyTheme, THEMES } from "../lib/appearance";
 import type { Font, Theme } from "../lib/appearance";
-import { logout, me } from "../api/auth";
+import { icon } from "../lib/icons";
+import { copyToClipboard } from "../lib/clipboard";
+import { clearLoggedIn, hasLoggedInBefore, logout, markLoggedIn, me } from "../api/auth";
+import { getSetting, putSetting } from "../storage/settings-db";
 import type { User } from "../api/auth";
 import { isUnauthorized } from "../api/client";
 import { renderLoginView } from "./login-view";
 import { renderSignupView } from "./signup-view";
-import { showUndoToast } from "../lib/toast";
+import { showUndoToast, showStatusToast } from "../lib/toast";
+import { describeApiError } from "../lib/form";
+
+const DEMO_SEEDED_KEY = "hasSeededDemo";
 
 const DEMO_DOC = `# Welcome to MD
 
@@ -59,154 +69,11 @@ type ViewMode = "editor" | "split" | "preview";
 const MODES: ViewMode[] = ["editor", "split", "preview"];
 
 export function renderEditorView(root: HTMLElement) {
-  root.innerHTML = `
-    <div class="app-shell">
-      <aside class="sidebar" id="sidebar"></aside>
-      <div class="main-column">
-        <header class="app-header">
-          <button
-            type="button"
-            id="sidebar-toggle"
-            title="Show/hide sidebar"
-            aria-pressed="true"
-          >🗂️</button>
-          <div class="mode-switcher" role="group" aria-label="View mode">
-            <button type="button" data-mode="editor">Editor</button>
-            <button type="button" data-mode="split">Split</button>
-            <button type="button" data-mode="preview">Preview</button>
-          </div>
-          <div class="save-status" id="save-status">
-            <span class="status-dot" id="status-dot" data-state="saved"></span>
-            <span id="status-text">Saved</span>
-          </div>
-          <button type="button" id="image-upload-button" title="Insert image">🖼️</button>
-          <input type="file" id="image-upload-input" accept="image/*" multiple hidden />
-          <button type="button" id="pdf-export-button" title="Export to PDF">🖨️</button>
-          <button type="button" id="appearance-button" title="Theme & font">🎨</button>
-        </header>
-        <main class="app-body">
-          <div class="editor-pane" id="editor-pane"></div>
-          <div class="split-divider" id="split-divider"></div>
-          <div class="preview-pane" id="preview-pane"></div>
-        </main>
-        <footer class="app-footer">
-          <div class="footer-info">
-            <span class="doc-stats" id="doc-stats">0 words · 0 chars</span>
-            <label class="tab-width-picker">
-              Tab width
-              <select id="tab-width-select">
-                <option value="2">2 spaces</option>
-                <option value="4" selected>4 spaces</option>
-                <option value="8">8 spaces</option>
-                <option value="tab">Tab character</option>
-              </select>
-            </label>
-          </div>
-          <div class="sync-controls">
-            <span class="sync-message" id="sync-message"></span>
-            <button type="button" id="pull-button">⬇️ Pull</button>
-            <button type="button" id="push-button">⬆️ Push</button>
-            <button type="button" id="shortcuts-button" title="Keyboard shortcuts">❓</button>
-          </div>
-        </footer>
-      </div>
-    </div>
-    <dialog id="shortcuts-dialog">
-      <button type="button" id="shortcuts-close" class="shortcuts-close" title="Close" aria-label="Close">✕</button>
-      <h2>Keyboard shortcuts</h2>
-
-      <h3>Files</h3>
-      <table>
-        <tr><th>Action</th><th>Shortcut</th></tr>
-        <tr><td>Search files</td><td>Ctrl + K</td></tr>
-        <tr><td>New file</td><td>Alt + N</td></tr>
-        <tr><td>Rename selected file</td><td>F2</td></tr>
-        <tr><td>Delete file</td><td>Ctrl + Shift + K</td></tr>
-        <tr><td>Previous / next file</td><td>Alt + ↑ / Alt + ↓</td></tr>
-        <tr><td>Show / hide sidebar</td><td>Ctrl + /</td></tr>
-      </table>
-
-      <h3>Saving</h3>
-      <table>
-        <tr><th>Action</th><th>Shortcut</th></tr>
-        <tr><td>Save locally</td><td>Ctrl + S</td></tr>
-        <tr><td>Save to database</td><td>Ctrl + Shift + S</td></tr>
-        <tr><td>Re-pull from database</td><td>Ctrl + Shift + E</td></tr>
-      </table>
-
-      <h3>Views</h3>
-      <table>
-        <tr><th>Action</th><th>Shortcut</th></tr>
-        <tr><td>Editor / Split / Preview</td><td>Alt + 1 / 2 / 3</td></tr>
-        <tr><td>Cycle views</td><td>Alt + V</td></tr>
-        <tr><td>Next theme</td><td>Alt + T</td></tr>
-        <tr><td>Leave the editor</td><td>Esc</td></tr>
-      </table>
-
-      <h3>Formatting</h3>
-      <table>
-        <tr><th>Action</th><th>Shortcut</th></tr>
-        <tr><td>Bold</td><td>Ctrl + B</td></tr>
-        <tr><td>Italic</td><td>Ctrl + I</td></tr>
-        <tr><td>Inline code</td><td>Ctrl + E</td></tr>
-        <tr><td>Insert link</td><td>Ctrl + Shift + L</td></tr>
-        <tr><td>Indent / outdent</td><td>Tab / Shift + Tab</td></tr>
-        <tr><td>Tick / untick task</td><td>Ctrl + Enter</td></tr>
-        <tr><td>Move line up / down</td><td>Alt + Shift + ↑ / ↓</td></tr>
-        <tr><td>Duplicate line</td><td>Alt + Shift + D</td></tr>
-      </table>
-
-      <p>This sheet: F1, or ? (outside the editor and inputs)</p>
-    </dialog>
-    <dialog id="appearance-dialog">
-      <button type="button" id="appearance-close" class="shortcuts-close" title="Close" aria-label="Close">✕</button>
-      <h2>Appearance</h2>
-
-      <label class="field">
-        Theme
-        <select id="theme-select">
-          <option value="system">System</option>
-          <option value="light">Light</option>
-          <option value="dark">Dark</option>
-        </select>
-      </label>
-
-      <label class="field">
-        Font
-        <select id="font-select">
-          <option value="sans">Sans</option>
-          <option value="serif">Serif</option>
-          <option value="mono">Monospace</option>
-        </select>
-      </label>
-    </dialog>
-    <dialog id="auth-dialog">
-      <button type="button" id="auth-dialog-close" class="shortcuts-close" title="Close" aria-label="Close">✕</button>
-      <p id="auth-dialog-message"></p>
-      <div id="auth-dialog-content"></div>
-    </dialog>
-    <dialog id="export-dialog">
-      <button type="button" id="export-dialog-close" class="shortcuts-close" title="Close" aria-label="Close">✕</button>
-      <h2>Export notes</h2>
-      <div id="export-note-list"></div>
-      <fieldset>
-        <legend>Format</legend>
-        <label>
-          <input type="radio" name="export-mode" value="separate" checked />
-          Separate files
-        </label>
-        <label>
-          <input type="radio" name="export-mode" value="zip" />
-          Zip archive
-        </label>
-      </fieldset>
-      <button type="button" id="export-confirm">Export</button>
-    </dialog>
-    <div id="toast-container"></div>
-  `;
+  root.innerHTML = buildShellHtml();
 
   const shell = root.querySelector<HTMLElement>(".app-shell")!;
   const sidebarRoot = root.querySelector<HTMLElement>("#sidebar")!;
+  const sidebarBackdrop = root.querySelector<HTMLElement>("#sidebar-backdrop")!;
   const appBody = root.querySelector<HTMLElement>(".app-body")!;
   const editorPane = root.querySelector<HTMLElement>("#editor-pane")!;
   const previewPane = root.querySelector<HTMLElement>("#preview-pane")!;
@@ -262,11 +129,47 @@ export function renderEditorView(root: HTMLElement) {
   const exportConfirmButton = root.querySelector<HTMLButtonElement>(
     "#export-confirm",
   )!;
+  const confirmDialog = createConfirmDialog(root);
+  const noteImportInput = root.querySelector<HTMLInputElement>(
+    "#note-import-input",
+  )!;
+  const settingsImportButton = root.querySelector<HTMLButtonElement>(
+    "#settings-import-button",
+  )!;
+  const settingsExportButton = root.querySelector<HTMLButtonElement>(
+    "#settings-export-button",
+  )!;
+
+  const isNarrowViewport = () => window.matchMedia("(max-width: 860px)").matches;
+
+  // Wires a dialog's close button (and, unless disabled, a backdrop
+  // click) to the same close logic. Backdrop-close is off for the auth
+  // dialog — a login/signup form losing its half-typed input from a
+  // stray outside click is worse than for a purely informational dialog.
+  function wireDialogClose(
+    dialog: HTMLDialogElement,
+    closeButton: HTMLButtonElement,
+    onClose?: () => void,
+    closeOnBackdrop = true,
+  ) {
+    const close = () => {
+      onClose?.();
+      dialog.close();
+    };
+    closeButton.addEventListener("click", close);
+    if (closeOnBackdrop) {
+      dialog.addEventListener("click", (event) => {
+        if (event.target === dialog) close();
+      });
+    }
+  }
 
   let mode: ViewMode = "editor";
   let activeId: string | null = null;
   let sidebarHandles!: SidebarHandles;
-  let sidebarHidden = false;
+  // Starts closed on a narrow viewport, where the sidebar overlays the
+  // content instead of sitting beside it.
+  let sidebarHidden = isNarrowViewport();
   let currentUser: User | null = null;
   let pendingAfterAuth: (() => void) | null = null;
   let currentTabWidth: TabWidthOption = 4;
@@ -306,18 +209,30 @@ export function renderEditorView(root: HTMLElement) {
     sidebarHandles.refresh(store.list(), activeId);
   }
 
-  function toggleSidebar() {
-    sidebarHidden = !sidebarHidden;
-    shell.dataset.sidebarHidden = String(sidebarHidden);
-    sidebarToggleButton.setAttribute("aria-pressed", String(!sidebarHidden));
+  function setSidebarHidden(hidden: boolean) {
+    sidebarHidden = hidden;
+    shell.dataset.sidebarHidden = String(hidden);
+    sidebarToggleButton.setAttribute("aria-pressed", String(!hidden));
   }
 
+  function toggleSidebar() {
+    setSidebarHidden(!sidebarHidden);
+  }
+
+  function closeSidebarIfNarrow() {
+    if (isNarrowViewport()) setSidebarHidden(true);
+  }
+
+  sidebarBackdrop.addEventListener("click", () => setSidebarHidden(true));
+
   function toggleShortcutsDialog() {
+    wakeChrome();
     if (shortcutsDialog.open) shortcutsDialog.close();
     else shortcutsDialog.showModal();
   }
 
   function openExportDialog() {
+    wakeChrome();
     const notes = store.list();
     exportNoteList.innerHTML = notes
       .map(
@@ -352,12 +267,12 @@ export function renderEditorView(root: HTMLElement) {
 
   function handleAuthenticated(user: User) {
     currentUser = user;
+    void markLoggedIn();
     updateAuthIndicator();
     authDialog.close();
 
-    // Auto-pull on every successful login, per the README's sync design
-    // ("sign in on any device and your notes are there") — then resume
-    // whatever else was pending (e.g. a push blocked by a 401).
+    // Auto-pull on every successful login, then resume whatever else was
+    // pending (e.g. a push blocked by a 401).
     void handlePull().then(() => {
       const resume = pendingAfterAuth;
       pendingAfterAuth = null;
@@ -369,6 +284,7 @@ export function renderEditorView(root: HTMLElement) {
   // once login succeeds — used so a push/pull blocked by a 401 resumes
   // right where it left off instead of just failing.
   function openAuthDialog(message: string, onAuthenticated?: () => void) {
+    wakeChrome();
     pendingAfterAuth = onAuthenticated ?? null;
     authDialogMessage.textContent = message;
     showLoginInDialog();
@@ -383,16 +299,23 @@ export function renderEditorView(root: HTMLElement) {
       // to clear local state regardless.
     }
     currentUser = null;
+    void clearLoggedIn();
     updateAuthIndicator();
   }
 
-  const THEME_ORDER: Theme[] = ["system", "light", "dark"];
+  // Re-renders the preview too, so a visible code block's highlighting
+  // doesn't sit stale in the old theme.
+  function refreshSyntaxTheme(theme: string) {
+    setSyntaxTheme(view, theme);
+    void renderPreview(previewPane, view.state.doc.toString());
+  }
 
   function cycleTheme() {
-    const current = (document.documentElement.dataset.theme as Theme) || "system";
-    const next = THEME_ORDER[(THEME_ORDER.indexOf(current) + 1) % THEME_ORDER.length];
+    const current = (document.documentElement.dataset.theme as Theme) || THEMES[0];
+    const next = THEMES[(THEMES.indexOf(current) + 1) % THEMES.length];
     applyTheme(next);
     themeSelect.value = next;
+    refreshSyntaxTheme(next);
   }
 
   function selectRelativeNote(offset: -1 | 1) {
@@ -410,14 +333,35 @@ export function renderEditorView(root: HTMLElement) {
     docStats.textContent = `${countWords(content)} words · ${countChars(content)} chars`;
   }
 
+  function formatClock(): string {
+    const now = new Date();
+    return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  }
+
   function setSaveState(state: SaveState) {
     hasUnsavedWork = state === "saving";
     statusDot.dataset.state = state;
-    statusText.textContent = state === "saving" ? "Saving…" : "Saved";
+    statusText.textContent =
+      state === "saving" ? "Saving…" : `Saved ${formatClock()}`;
+  }
+
+  // Fades the header/footer chrome to a low opacity while the user is
+  // actively typing (reveal on hover via CSS), so the writing surface
+  // isn't competing with UI for attention; settles back after a pause.
+  let dozeTimer: ReturnType<typeof setTimeout> | undefined;
+  function noteTypingActivity() {
+    document.body.classList.add("dozing");
+    clearTimeout(dozeTimer);
+    dozeTimer = setTimeout(() => document.body.classList.remove("dozing"), 2200);
+  }
+  function wakeChrome() {
+    clearTimeout(dozeTimer);
+    document.body.classList.remove("dozing");
   }
 
   function handleDocChange(doc: string) {
     if (!activeId) return;
+    noteTypingActivity();
     store.updateContent(activeId, doc);
     scheduleRenderPreview(doc);
     updateStats(doc);
@@ -429,6 +373,9 @@ export function renderEditorView(root: HTMLElement) {
       onChange: handleDocChange,
     });
     void renderPreview(previewPane, content);
+    // renderPreview() otherwise preserves scrollTop across a re-render —
+    // this is a different note, so start its preview at the top.
+    previewPane.scrollTop = 0;
     updateStats(content);
   }
 
@@ -450,7 +397,7 @@ export function renderEditorView(root: HTMLElement) {
           void handlePush(),
         );
       } else {
-        syncMessage.textContent = `Push failed: ${err instanceof Error ? err.message : "unknown error"}`;
+        syncMessage.textContent = `Push failed: ${describeApiError(err)}`;
       }
     } finally {
       pushButton.disabled = false;
@@ -474,7 +421,7 @@ export function renderEditorView(root: HTMLElement) {
           void handlePull(),
         );
       } else {
-        syncMessage.textContent = `Pull failed: ${err instanceof Error ? err.message : "unknown error"}`;
+        syncMessage.textContent = `Pull failed: ${describeApiError(err)}`;
       }
     } finally {
       pullButton.disabled = false;
@@ -496,6 +443,7 @@ export function renderEditorView(root: HTMLElement) {
     activeId = id;
     loadIntoEditor(note.content);
     refreshSidebar();
+    closeSidebarIfNarrow();
 
     requestAnimationFrame(() => {
       view.scrollDOM.scrollTop = scrollPositions.get(id) ?? 0;
@@ -508,6 +456,7 @@ export function renderEditorView(root: HTMLElement) {
     activeId = note.id;
     loadIntoEditor(note.content);
     refreshSidebar();
+    closeSidebarIfNarrow();
   }
 
   function deleteNote(id: string) {
@@ -536,7 +485,25 @@ export function renderEditorView(root: HTMLElement) {
   }
 
   async function importFiles(files: FileList | File[]) {
-    const created = await store.importFiles(files);
+    const all = Array.from(files);
+    const zipFiles = all.filter((file) => file.name.toLowerCase().endsWith(".zip"));
+    const mdFiles = all.filter((file) => !file.name.toLowerCase().endsWith(".zip"));
+
+    const created: Note[] = [];
+    if (mdFiles.length > 0) created.push(...(await store.importFiles(mdFiles)));
+
+    for (const zipFile of zipFiles) {
+      try {
+        const entries = await importZip(zipFile);
+        for (const entry of entries) {
+          created.push(await store.create(entry.content, entry.fallbackTitle));
+        }
+      } catch {
+        const toast = showStatusToast(`Couldn't read "${zipFile.name}" as a zip archive.`);
+        setTimeout(() => toast.close(), 4000);
+      }
+    }
+
     const first = created[0];
     if (first) await selectNote(first.id);
     else refreshSidebar();
@@ -552,8 +519,22 @@ export function renderEditorView(root: HTMLElement) {
     onChange: handleDocChange,
   });
 
-  pushButton.addEventListener("click", () => void handlePush());
-  pullButton.addEventListener("click", () => void handlePull());
+  pushButton.addEventListener("click", () => {
+    void confirmDialog.confirm(
+      "Push notes?",
+      "Writes your local changes to the database as a checkpoint.",
+    ).then((ok) => {
+      if (ok) void handlePush();
+    });
+  });
+  pullButton.addEventListener("click", () => {
+    void confirmDialog.confirm(
+      "Pull notes?",
+      "New notes from the database will be added locally. Existing local notes are left untouched.",
+    ).then((ok) => {
+      if (ok) void handlePull();
+    });
+  });
   sidebarToggleButton.addEventListener("click", () => toggleSidebar());
 
   pdfExportButton.addEventListener("click", () => {
@@ -580,34 +561,48 @@ export function renderEditorView(root: HTMLElement) {
     onSelect: (id) => void selectNote(id),
     onDelete: (id) => void deleteNote(id),
     onNew: () => void createNewNote(),
-    onImportFiles: (files) => void importFiles(files),
-    onExportRequest: () => openExportDialog(),
-    onRename: (id, title) => void store.rename(id, title),
-    onAuthAction: () => {
-      if (currentUser) void handleLogout();
-      else openAuthDialog("Log in to sync your notes.");
+    onRename: (id, title) => {
+      void store.rename(id, title).catch((err) => {
+        const toast = showStatusToast(`Rename failed: ${describeApiError(err)}`);
+        setTimeout(() => toast.close(), 4000);
+      });
     },
+    onAuthAction: () => {
+      if (currentUser) {
+        void confirmDialog.confirm(
+          "Log out?",
+          "You'll need to log in again to sync your notes.",
+        ).then((ok) => {
+          if (ok) void handleLogout();
+        });
+      } else {
+        openAuthDialog("Log in to sync your notes.");
+      }
+    },
+  });
+
+  settingsImportButton.addEventListener("click", () => noteImportInput.click());
+
+  noteImportInput.addEventListener("change", () => {
+    const files = noteImportInput.files;
+    if (files && files.length > 0) {
+      appearanceDialog.close();
+      void importFiles(files);
+    }
+    noteImportInput.value = "";
+  });
+
+  settingsExportButton.addEventListener("click", () => {
+    appearanceDialog.close();
+    openExportDialog();
   });
 
   root
     .querySelector<HTMLButtonElement>("#shortcuts-button")!
     .addEventListener("click", () => toggleShortcutsDialog());
 
-  root
-    .querySelector<HTMLButtonElement>("#shortcuts-close")!
-    .addEventListener("click", () => shortcutsDialog.close());
-
-  shortcutsDialog.addEventListener("click", (event) => {
-    if (event.target === shortcutsDialog) shortcutsDialog.close();
-  });
-
-  root
-    .querySelector<HTMLButtonElement>("#export-dialog-close")!
-    .addEventListener("click", () => exportDialog.close());
-
-  exportDialog.addEventListener("click", (event) => {
-    if (event.target === exportDialog) exportDialog.close();
-  });
+  wireDialogClose(shortcutsDialog, root.querySelector("#shortcuts-close")!);
+  wireDialogClose(exportDialog, root.querySelector("#export-dialog-close")!);
 
   exportConfirmButton.addEventListener("click", async () => {
     const selectedIds = Array.from(
@@ -637,42 +632,33 @@ export function renderEditorView(root: HTMLElement) {
   // main.ts already applied the persisted theme/font (from IndexedDB) to
   // <html>'s dataset before this view was ever rendered — just reflect
   // that into the selects rather than re-reading storage here.
-  themeSelect.value = document.documentElement.dataset.theme ?? "system";
-  fontSelect.value = document.documentElement.dataset.font ?? "sans";
+  themeSelect.value = document.documentElement.dataset.theme ?? "sage";
+  fontSelect.value = document.documentElement.dataset.font ?? "jbmono";
 
   appearanceButton.addEventListener("click", () => {
+    wakeChrome();
     if (appearanceDialog.open) appearanceDialog.close();
     else appearanceDialog.showModal();
   });
 
-  root
-    .querySelector<HTMLButtonElement>("#appearance-close")!
-    .addEventListener("click", () => appearanceDialog.close());
+  wireDialogClose(appearanceDialog, root.querySelector("#appearance-close")!);
 
-  appearanceDialog.addEventListener("click", (event) => {
-    if (event.target === appearanceDialog) appearanceDialog.close();
+  themeSelect.addEventListener("change", () => {
+    applyTheme(themeSelect.value as Theme);
+    refreshSyntaxTheme(themeSelect.value);
   });
-
-  themeSelect.addEventListener("change", () =>
-    applyTheme(themeSelect.value as Theme),
-  );
   fontSelect.addEventListener("change", () =>
     applyFont(fontSelect.value as Font),
   );
 
-  root
-    .querySelector<HTMLButtonElement>("#auth-dialog-close")!
-    .addEventListener("click", () => {
+  wireDialogClose(
+    authDialog,
+    root.querySelector("#auth-dialog-close")!,
+    () => {
       pendingAfterAuth = null;
-      authDialog.close();
-    });
-
-  authDialog.addEventListener("click", (event) => {
-    if (event.target === authDialog) {
-      pendingAfterAuth = null;
-      authDialog.close();
-    }
-  });
+    },
+    false,
+  );
 
   tabWidthSelect.addEventListener("change", () => {
     const value = tabWidthSelect.value;
@@ -691,19 +677,40 @@ export function renderEditorView(root: HTMLElement) {
       return;
 
     const taskIndex = Number(target.dataset.taskIndex);
-    const nextSource = toggleTaskInSource(
-      view.state.doc.toString(),
-      taskIndex,
-    );
-    if (nextSource === null) return;
+    const change = toggleTaskInSource(view.state.doc.toString(), taskIndex);
+    if (change === null) return;
 
-    view.dispatch({
-      changes: { from: 0, to: view.state.doc.length, insert: nextSource },
+    view.dispatch({ changes: change });
+  });
+
+  // Copy button on rendered code blocks — delegated since it's injected
+  // via innerHTML, not created here.
+  previewPane.addEventListener("click", (event) => {
+    const target = event.target;
+    // Element, not HTMLElement: a click can land on the button's <svg> icon.
+    if (!(target instanceof Element)) return;
+
+    const button = target.closest<HTMLButtonElement>("[data-copy-code]");
+    if (!button) return;
+
+    const code = button.dataset.copyCode ?? "";
+    void copyToClipboard(code).then((ok) => {
+      const original = button.innerHTML;
+      button.innerHTML = ok
+        ? `${icon("check")}<span>Copied</span>`
+        : `${icon("x")}<span>Couldn't copy</span>`;
+      button.disabled = true;
+      setTimeout(() => {
+        button.innerHTML = original;
+        button.disabled = false;
+      }, 1500);
     });
   });
 
-  // Synced scrolling in split mode, guarded against feedback loops.
+  // Synced scrolling in split mode, guarded against feedback loops and
+  // coalesced to one update per animation frame to avoid scroll jank.
   let syncingScroll = false;
+  let scrollSyncFrame: number | null = null;
 
   function proportionalScroll(source: HTMLElement, target: HTMLElement) {
     const sourceRange = source.scrollHeight - source.clientHeight;
@@ -713,29 +720,61 @@ export function renderEditorView(root: HTMLElement) {
     target.scrollTop = ratio * targetRange;
   }
 
-  view.scrollDOM.addEventListener("scroll", () => {
-    if (mode !== "split" || syncingScroll) return;
-    syncingScroll = true;
-    proportionalScroll(view.scrollDOM, previewPane);
-    syncingScroll = false;
-  });
+  function scheduleScrollSync(source: HTMLElement, target: HTMLElement) {
+    if (scrollSyncFrame !== null) return;
+    scrollSyncFrame = requestAnimationFrame(() => {
+      scrollSyncFrame = null;
+      syncingScroll = true;
+      proportionalScroll(source, target);
+      // target's own "scroll" event for this programmatic change fires
+      // asynchronously (next frame), not within this callback — clearing
+      // the guard here would let it slip through and bounce back.
+      requestAnimationFrame(() => {
+        syncingScroll = false;
+      });
+    });
+  }
 
-  previewPane.addEventListener("scroll", () => {
-    if (mode !== "split" || syncingScroll) return;
-    syncingScroll = true;
-    proportionalScroll(previewPane, view.scrollDOM);
-    syncingScroll = false;
-  });
+  view.scrollDOM.addEventListener(
+    "scroll",
+    () => {
+      if (mode !== "split" || syncingScroll) return;
+      scheduleScrollSync(view.scrollDOM, previewPane);
+    },
+    { passive: true },
+  );
 
-  // Drag the divider between editor and preview in split mode (VS
-  // Code-style resizable split) — sets the editor pane's share of the
-  // row as a percentage; the preview pane just fills what's left.
-  const MIN_PANE_RATIO = 0.15;
-  const MAX_PANE_RATIO = 0.85;
+  previewPane.addEventListener(
+    "scroll",
+    () => {
+      if (mode !== "split" || syncingScroll) return;
+      scheduleScrollSync(previewPane, view.scrollDOM);
+    },
+    { passive: true },
+  );
+
+  // Drag the divider to resize the split. Min/max is a pixel width, not
+  // a fixed percentage, so a narrow window can't wrap either pane down
+  // to one word per line.
+  const MIN_PANE_PX = 280;
+  const SPLIT_NUDGE_STEP = 0.05;
+  let splitRatio = 0.5;
+
+  function paneRatioBounds() {
+    const total = appBody.getBoundingClientRect().width || 1;
+    const minRatio = Math.min(0.5, MIN_PANE_PX / total);
+    return { min: minRatio, max: 1 - minRatio };
+  }
 
   function setSplitRatio(ratio: number) {
-    const clamped = Math.min(MAX_PANE_RATIO, Math.max(MIN_PANE_RATIO, ratio));
-    editorPane.style.flex = `0 0 ${clamped * 100}%`;
+    const { min, max } = paneRatioBounds();
+    splitRatio = Math.min(max, Math.max(min, ratio));
+    editorPane.style.flex = `0 0 ${splitRatio * 100}%`;
+  }
+
+  function nudgeSplitRatio(delta: number) {
+    if (mode !== "split") return;
+    setSplitRatio(splitRatio + delta);
   }
 
   splitDivider.addEventListener("mousedown", (event) => {
@@ -759,18 +798,32 @@ export function renderEditorView(root: HTMLElement) {
     document.addEventListener("mouseup", onMouseUp);
   });
 
+  // Double-click the divider to reset back to an even split.
+  splitDivider.addEventListener("dblclick", () => {
+    if (mode === "split") setSplitRatio(0.5);
+  });
+
   function isEditableTarget(el: Element | null): boolean {
     if (!el) return false;
     if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") return true;
     return el instanceof HTMLElement && el.isContentEditable;
   }
 
-  // Every app-level shortcut (Files/Saving/Views/Help) lives in one
-  // capture-phase document listener, so it wins over whatever has focus —
-  // the editor, the sidebar search box, the rename field — matching the
-  // README's stated shortcut architecture. Formatting shortcuts (bold,
-  // italic, task toggle, line move, etc.) stay inside CodeMirror's own
-  // keymap since they only make sense with editor focus.
+  function isAnyDialogOpen(): boolean {
+    return (
+      shortcutsDialog.open ||
+      appearanceDialog.open ||
+      authDialog.open ||
+      exportDialog.open ||
+      confirmDialog.isOpen()
+    );
+  }
+
+  // Every app-level shortcut lives in one capture-phase document listener,
+  // so it wins over whatever has focus — the editor, the sidebar search
+  // box, the rename field. Formatting shortcuts (bold, italic, task
+  // toggle, line move, etc.) stay inside CodeMirror's own keymap instead,
+  // since they only make sense with editor focus.
   document.addEventListener(
     "keydown",
     (event) => {
@@ -783,6 +836,20 @@ export function renderEditorView(root: HTMLElement) {
         event.preventDefault();
         event.stopPropagation();
       };
+
+      // Help works even with a dialog open (F1 can still close its own);
+      // every other shortcut below is suppressed while one is open.
+      if (key === "F1" && !mod && !alt && !shift) {
+        handle();
+        toggleShortcutsDialog();
+        return;
+      }
+      if (key === "?" && !mod && !alt && !isEditableTarget(document.activeElement)) {
+        handle();
+        toggleShortcutsDialog();
+        return;
+      }
+      if (isAnyDialogOpen()) return;
 
       // Views
       if (alt && !mod && !shift && (key === "1" || key === "2" || key === "3")) {
@@ -798,6 +865,17 @@ export function renderEditorView(root: HTMLElement) {
       if (alt && !mod && !shift && key.toLowerCase() === "t") {
         handle();
         cycleTheme();
+        return;
+      }
+      if (
+        alt &&
+        shift &&
+        !mod &&
+        mode === "split" &&
+        (key === "ArrowLeft" || key === "ArrowRight")
+      ) {
+        handle();
+        nudgeSplitRatio(key === "ArrowLeft" ? -SPLIT_NUDGE_STEP : SPLIT_NUDGE_STEP);
         return;
       }
 
@@ -849,17 +927,6 @@ export function renderEditorView(root: HTMLElement) {
         void handlePull();
         return;
       }
-
-      // Help
-      if (key === "F1" && !mod && !alt && !shift) {
-        handle();
-        toggleShortcutsDialog();
-        return;
-      }
-      if (key === "?" && !mod && !alt && !isEditableTarget(document.activeElement)) {
-        handle();
-        toggleShortcutsDialog();
-      }
     },
     { capture: true },
   );
@@ -872,10 +939,9 @@ export function renderEditorView(root: HTMLElement) {
     event.returnValue = "";
   });
 
-  // Bulk import via drag-and-drop anywhere on the window (README: "pick
-  // several .md files at once, or drag and drop them anywhere onto the
-  // window"). dragover must call preventDefault() or the browser refuses
-  // the drop entirely and just navigates to/opens the file instead.
+  // Bulk import via drag-and-drop anywhere on the window. dragover must
+  // call preventDefault() or the browser refuses the drop entirely and
+  // just navigates to/opens the file instead.
   window.addEventListener("dragover", (event) => {
     if (!event.dataTransfer?.types.includes("Files")) return;
     event.preventDefault();
@@ -892,17 +958,20 @@ export function renderEditorView(root: HTMLElement) {
     event.preventDefault();
     document.body.classList.remove("is-dragging-file");
 
-    const mdFiles = Array.from(event.dataTransfer.files).filter(
-      (file) => file.name.toLowerCase().endsWith(".md"),
+    const importableFiles = Array.from(event.dataTransfer.files).filter((file) =>
+      /\.(md|zip)$/i.test(file.name),
     );
-    if (mdFiles.length > 0) void importFiles(mdFiles);
+    if (importableFiles.length > 0) void importFiles(importableFiles);
   });
 
   async function bootstrap() {
     await store.load();
-    if (store.list().length === 0) {
+    // Only ever seeded once — otherwise deleting every note (including the
+    // demo itself) would just bring it right back on the next reload.
+    if (store.list().length === 0 && !(await getSetting(DEMO_SEEDED_KEY))) {
       await store.create(DEMO_DOC, "Welcome to MD");
     }
+    void putSetting(DEMO_SEEDED_KEY, "true");
 
     const first = store.list()[0];
     if (first) {
@@ -911,12 +980,15 @@ export function renderEditorView(root: HTMLElement) {
     }
     refreshSidebar();
 
-    // Silent check: not being logged in is a normal default state (auth
-    // is only needed to sync), so a failure here just leaves currentUser
-    // null instead of surfacing an error.
-    try {
-      currentUser = await me();
-    } catch {
+    // Skips a guaranteed-401 call for a device that's never logged in —
+    // otherwise every load, even fully offline use, pays for one.
+    if (await hasLoggedInBefore()) {
+      try {
+        currentUser = await me();
+      } catch {
+        currentUser = null;
+      }
+    } else {
       currentUser = null;
     }
     updateAuthIndicator();
@@ -925,4 +997,5 @@ export function renderEditorView(root: HTMLElement) {
   void bootstrap();
 
   applyMode();
+  setSidebarHidden(sidebarHidden);
 }

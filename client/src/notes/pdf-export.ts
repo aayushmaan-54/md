@@ -1,5 +1,5 @@
 import { renderPreview } from "../preview/render";
-import { escapeHtml } from "../lib/html";
+import { stripDerivedTitleHeading } from "./model";
 import type { Note } from "./model";
 
 const PRINT_AREA_ID = "pdf-print-area";
@@ -21,11 +21,24 @@ function getOrCreatePrintArea(): HTMLElement {
 // only that container while printing.
 export async function exportNoteToPdf(note: Note): Promise<void> {
   const printArea = getOrCreatePrintArea();
-  printArea.innerHTML = `<h1>${escapeHtml(note.title)}</h1>`;
+  printArea.innerHTML = "";
+
+  // .markdown-content gives both the title and the rendered body the
+  // same heading/table/code/mark styling the live preview uses — see
+  // that class in style.css. renderPreview() owns the body div's
+  // innerHTML entirely, so the title has to be a sibling, not a child
+  // of it, or it'd get wiped out on the next render.
+  const wrapper = document.createElement("div");
+  wrapper.className = "markdown-content";
+  printArea.appendChild(wrapper);
+
+  const heading = document.createElement("h1");
+  heading.textContent = note.title || "Untitled";
+  wrapper.appendChild(heading);
 
   const body = document.createElement("div");
-  printArea.appendChild(body);
-  await renderPreview(body, note.content);
+  wrapper.appendChild(body);
+  await renderPreview(body, stripDerivedTitleHeading(note.content, note.title));
 
   const previousTitle = document.title;
   document.title = note.title || "Untitled";

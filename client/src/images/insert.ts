@@ -5,6 +5,7 @@ import { getTotalImageBytes, putImage, setImageRemoteId } from "../storage/image
 import { uploadImage } from "../api/images";
 import { isForbidden, isUnauthorized } from "../api/client";
 import { showStatusToast } from "../lib/toast";
+import { describeApiError } from "../lib/form";
 
 let placeholderCounter = 0;
 
@@ -28,9 +29,7 @@ function showTransientMessage(message: string, durationMs = 4000) {
 // Runs on paste (see editor/image-paste.ts): inserts a text placeholder
 // immediately so there's visible feedback right where the image will
 // land, converts+stores the image while a status toast shows progress,
-// then swaps the placeholder for the real markdown once ready. Matches
-// the README: "A brief loader shows while the image is re-encoded...
-// before insertion."
+// then swaps the placeholder for the real markdown once ready.
 export async function insertPastedImage(
   view: EditorView,
   file: File,
@@ -84,7 +83,9 @@ export async function insertPastedImage(
           6000,
         );
       } else if (!isUnauthorized(err)) {
-        showTransientMessage("Image saved locally, but the backup upload failed.");
+        showTransientMessage(
+          `Image saved locally, but the backup upload failed: ${describeApiError(err)}`,
+        );
       }
     });
 }

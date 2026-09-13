@@ -1,0 +1,90 @@
+/* Design tokens — colors, fonts, layout scale. Every component should
+   use these variables, never a literal hex value.
+   Font stylesheets are injected lazily by lib/appearance.ts, not
+   imported here — only one family is ever active at a time. */
+
+:root {
+  --mono-jb: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --mono-plex: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --sans-inter: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --sans-sys: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  --serif-source: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --sans-dyslexic: "OpenDyslexic", "Comic Sans MS", sans-serif;
+
+  --radius: 8px;
+  --radius-lg: 12px;
+  --bar-h: 46px;
+  --foot-h: 30px;
+  --side-w: 268px;
+  --shadow-lg: 0 22px 60px rgba(0, 0, 0, 0.22);
+
+  /* Fallback palette (sage) so the page is never unstyled before JS
+     picks the persisted theme — overridden by data-theme below. */
+  --bg: #edefea; --panel: #f8f9f5; --rail: #e6e9e1; --edge: #daded4; --edge-soft: #e4e8df;
+  --ink: #1b211e; --ink-2: #48524d; --mute: #7a857f;
+  --accent: #2c6b5a; --accent-soft: #dce9e3; --on-accent: #ffffff; --warn: #b0762a; --mark: #f0e7c8;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12171a; --panel: #181d20; --rail: #151a1d; --edge: #242c30; --edge-soft: #1e2528;
+    --ink: #dce4e0; --ink-2: #aab6b1; --mute: #75827d;
+    --accent: #67cbaa; --accent-soft: #1b2e2a; --on-accent: #0e1416; --warn: #d2a257; --mark: #3a3517;
+  }
+}
+
+:root[data-font="jbmono"]   { --app-font: var(--mono-jb); }
+:root[data-font="plex"]     { --app-font: var(--mono-plex); }
+:root[data-font="inter"]    { --app-font: var(--sans-inter); }
+:root[data-font="system"]   { --app-font: var(--sans-sys); }
+:root[data-font="serif"]    { --app-font: var(--serif-source); }
+:root[data-font="dyslexic"] { --app-font: var(--sans-dyslexic); }
+
+/* ---------- light themes ---------- */
+:root[data-theme="sage"] {
+  --bg: #edefea; --panel: #f8f9f5; --rail: #e6e9e1; --edge: #daded4; --edge-soft: #e4e8df;
+  --ink: #1b211e; --ink-2: #48524d; --mute: #7a857f;
+  --accent: #2c6b5a; --accent-soft: #dce9e3; --on-accent: #ffffff; --warn: #b0762a; --mark: #f0e7c8;
+}
+:root[data-theme="iris"] {
+  --bg: #ede9e2; --panel: #f7f4ef; --rail: #e6e1d8; --edge: #dad3c8; --edge-soft: #e4dfd5;
+  --ink: #22201c; --ink-2: #4e4941; --mute: #847d71;
+  --accent: #4a4494; --accent-soft: #e0def0; --on-accent: #ffffff; --warn: #a8722c; --mark: #efe3b8;
+}
+:root[data-theme="frost"] {
+  --bg: #e9edf1; --panel: #f6f8fa; --rail: #e1e6ec; --edge: #d2d9e1; --edge-soft: #e1e6ec;
+  --ink: #171d24; --ink-2: #414b57; --mute: #78838f;
+  --accent: #2b5f97; --accent-soft: #dce6f1; --on-accent: #ffffff; --warn: #9c6b22; --mark: #e4e0ae;
+}
+:root[data-theme="paper"] {
+  --bg: #ffffff; --panel: #fdfdfd; --rail: #f2f2f2; --edge: #e0e0e0; --edge-soft: #ebebeb;
+  --ink: #111111; --ink-2: #454545; --mute: #767676;
+  --accent: #1552b8; --accent-soft: #e3ebf8; --on-accent: #ffffff; --warn: #a85d16; --mark: #fdf1a0;
+}
+:root[data-theme="sepia"] {
+  --bg: #f4ecd8; --panel: #faf4e6; --rail: #ede3c9; --edge: #ddcda8; --edge-soft: #e7dcbc;
+  --ink: #3a2e1d; --ink-2: #5c4c34; --mute: #8a7a5c;
+  --accent: #8a5522; --accent-soft: #ecdcc0; --on-accent: #fff8ec; --warn: #9c3f1c; --mark: #e8d183;
+}
+
+/* ---------- dark themes ---------- */
+:root[data-theme="pine"] {
+  --bg: #12171a; --panel: #181d20; --rail: #151a1d; --edge: #242c30; --edge-soft: #1e2528;
+  --ink: #dce4e0; --ink-2: #aab6b1; --mute: #75827d;
+  --accent: #67cbaa; --accent-soft: #1b2e2a; --on-accent: #0e1416; --warn: #d2a257; --mark: #3a3517;
+}
+:root[data-theme="carbon"] {
+  --bg: #151515; --panel: #1c1c1c; --rail: #181818; --edge: #2b2b2b; --edge-soft: #232323;
+  --ink: #e4e1db; --ink-2: #afaba3; --mute: #7c7972;
+  --accent: #d89a3c; --accent-soft: #33260f; --on-accent: #181307; --warn: #c77b54; --mark: #3b3212;
+}
+:root[data-theme="plum"] {
+  --bg: #16121d; --panel: #1d1826; --rail: #191420; --edge: #2c2438; --edge-soft: #241d2e;
+  --ink: #e1daec; --ink-2: #aea4be; --mute: #7c7290;
+  --accent: #c77bc4; --accent-soft: #2e1f32; --on-accent: #140f19; --warn: #ce9160; --mark: #3d2a20;
+}
+:root[data-theme="oled"] {
+  --bg: #000000; --panel: #0a0a0a; --rail: #060606; --edge: #202020; --edge-soft: #171717;
+  --ink: #e8e8e8; --ink-2: #a8a8a8; --mute: #707070;
+  --accent: #4ea1ff; --accent-soft: #12233a; --on-accent: #071018; --warn: #e2a53f; --mark: #332a12;
+}

@@ -7,3 +7,7 @@ export function getSetting(key: string): Promise<string | undefined> {
 export async function putSetting(key: string, value: string): Promise<void> {
   await withStore(SETTINGS_STORE, "readwrite", (store) => store.put(value, key));
 }
+
+export async function deleteSetting(key: string): Promise<void> {
+  await withStore(SETTINGS_STORE, "readwrite", (store) => store.delete(key));
+}

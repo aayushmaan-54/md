@@ -1,10 +1,7 @@
 import { ApiRequestError } from "../api/client";
 
-// Clears previous errors, then re-populates [data-field-error="<path>"]
-// elements from the API's per-field validation errors. Anything that
-// doesn't match a field (e.g. "confirmPassword" refine errors targeting a
-// field not on this form, or a plain message like "Username is already
-// taken") falls back to the general error element.
+// Populates [data-field-error="<path>"] elements from the API's
+// per-field errors; anything unmatched falls back to generalErrorEl.
 export function applyFormError(
   form: HTMLFormElement,
   generalErrorEl: HTMLElement,
@@ -35,4 +32,16 @@ export function applyFormError(
   }
 
   if (unmatched.length > 0) generalErrorEl.textContent = unmatched.join(" ");
+}
+
+// Like applyFormError, but for plain-text surfaces (toasts, status
+// messages) with no per-field slots to populate.
+export function describeApiError(err: unknown): string {
+  if (err instanceof ApiRequestError) {
+    if (err.errors.length > 0) {
+      return `${err.message}: ${err.errors.map((issue) => issue.message).join("; ")}`;
+    }
+    return err.message;
+  }
+  return err instanceof Error ? err.message : "unknown error";
 }

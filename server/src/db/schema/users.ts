@@ -19,5 +19,5 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   sessions: many(sessions),
   notes: many(notes),
   images: many(images),
-  quota: one(quotas), // image quota only that's why one for now
+  quota: one(quotas), // only one quota type (image) exists today
 }));

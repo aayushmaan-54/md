@@ -1,7 +1,7 @@
 import { apiFetch } from "./client";
 
 // The server never interprets a note's `data` — it's an opaque blob owned
-// by the client. See ../../../../docs/SYNC.md.
+// by the client.
 export type RemoteNoteData = {
   title: string;
   titleIsManual: boolean;

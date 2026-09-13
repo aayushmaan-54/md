@@ -1,7 +1,5 @@
 export const API_PREFIX = "/api/v1";
 
-export const PAGINATION = { defaultLimit: 20, maxLimit: 100 } as const;
-
 export const IMAGE_QUOTA_BYTES = 25 * 1024 * 1024; // 25MB total per user
 
 export const SESSION_REFRESH_THRESHOLD_RATIO = 0.5;

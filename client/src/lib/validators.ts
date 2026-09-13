@@ -61,3 +61,19 @@ export function validateConfirmPassword(
   if (password !== confirmPassword) return "Passwords do not match";
   return null;
 }
+
+// Mirrors loginUsernameSchema/loginPasswordSchema — deliberately lenient
+// (no strength/pattern rules) since login only needs to reject what the
+// server would reject outright, not re-validate signup-time rules.
+export function validateLoginUsername(rawValue: string): string | null {
+  const value = rawValue.trim();
+  if (value.length === 0) return null;
+  if (value.length > USERNAME_MAX) return "Username is too long";
+  return null;
+}
+
+export function validateLoginPassword(password: string): string | null {
+  if (password.length === 0) return null;
+  if (password.length > PASSWORD_MAX) return "Password is too long";
+  return null;
+}

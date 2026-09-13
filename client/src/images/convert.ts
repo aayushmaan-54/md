@@ -4,17 +4,26 @@
 // Canvas API's toBlob only exposes WebP's *lossy* quality knob (1 = best
 // lossy quality) — there is no browser API for libwebp's true lossless
 // mode, so this is "highest-quality lossy", not bit-for-bit lossless.
+const MAX_IMAGE_DIMENSION = 2000;
+
 export async function convertToWebp(source: File | Blob): Promise<Blob> {
   const bitmap = await createImageBitmap(source);
 
   try {
+    const scale = Math.min(
+      1,
+      MAX_IMAGE_DIMENSION / Math.max(bitmap.width, bitmap.height),
+    );
+    const width = Math.round(bitmap.width * scale);
+    const height = Math.round(bitmap.height * scale);
+
     const canvas = document.createElement("canvas");
-    canvas.width = bitmap.width;
-    canvas.height = bitmap.height;
+    canvas.width = width;
+    canvas.height = height;
 
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("Canvas 2D context unavailable");
-    ctx.drawImage(bitmap, 0, 0);
+    ctx.drawImage(bitmap, 0, 0, width, height);
 
     return await new Promise<Blob>((resolve, reject) => {
       canvas.toBlob(

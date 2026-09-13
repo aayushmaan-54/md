@@ -15,7 +15,7 @@ export const registerMiddleware = (app: Hono<AppEnv>) => {
   app.use("*", requestId({ headerName: "cf-ray" }));
   app.use("*", loggerMiddleware);
   app.use("*", secureHeaders());
-  app.use("*", prettyJSON()); // add ?pretty to query params to pretty print JSON responses
+  app.use("*", prettyJSON());
   app.use("*", timing({ enabled: (c) => c.env.ENVIRONMENT !== "production" }));
 
   app.use(

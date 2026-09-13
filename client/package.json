@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "generate:syntax-colors": "node scripts/generate-syntax-colors.mjs"
   },
   "dependencies": {
     "@codemirror/commands": "^6.11.0",
@@ -15,6 +16,7 @@
     "@codemirror/language-data": "^6.5.2",
     "@codemirror/state": "^6.7.1",
     "@codemirror/view": "^6.43.9",
+    "@lezer/highlight": "^1.2.3",
     "dompurify": "^3.4.14",
     "fflate": "^0.8.3",
     "marked": "^18.0.11",

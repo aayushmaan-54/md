@@ -12,6 +12,15 @@ import * as q from "./queries";
 // normalizes every upload before it reaches this endpoint.
 export const IMAGE_CONTENT_TYPE = "image/webp";
 
+// RIFF....WEBP container check — never trust the client-declared type.
+function isWebp(body: ArrayBuffer): boolean {
+  if (body.byteLength < 12) return false;
+  const bytes = new Uint8Array(body, 0, 12);
+  const ascii = (start: number, end: number) =>
+    String.fromCharCode(...bytes.subarray(start, end));
+  return ascii(0, 4) === "RIFF" && ascii(8, 12) === "WEBP";
+}
+
 export async function uploadImage(
   db: Db,
   bucket: R2Bucket,
@@ -25,6 +34,10 @@ export async function uploadImage(
 
   if (body.byteLength === 0) {
     throw new BadRequest("Image is empty");
+  }
+
+  if (!isWebp(body)) {
+    throw new BadRequest("Image must be a valid WEBP file");
   }
 
   await reserveImageQuota(db, options.userId, body.byteLength, { logger });
@@ -108,7 +121,14 @@ export async function deleteImage(
     throw new NotFound("Image not found");
   }
 
-  await bucket.delete(deleted.key);
+  // release quota even if the R2 delete fails; the DB row is already gone
+  await bucket.delete(deleted.key).catch((err) => {
+    logger.error("failed to delete r2 object after db row removed", {
+      imageId,
+      key: deleted.key,
+      reason: String(err),
+    });
+  });
   await releaseImageQuota(db, options.userId, deleted.bytes, { logger });
 
   logger.info("image deleted", { imageId });

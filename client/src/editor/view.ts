@@ -2,6 +2,7 @@ import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { createEditorExtensions } from "./setup";
 import type { EditorSetupOptions } from "./setup";
+import { reconfigureSyntaxTheme } from "./highlight";
 import { tabWidthCompartment, tabWidthExtension } from "./tab-width";
 import type { TabWidthOption } from "./tab-width";
 
@@ -22,6 +23,11 @@ export function setTabWidth(view: EditorView, option: TabWidthOption) {
   view.dispatch({
     effects: tabWidthCompartment.reconfigure(tabWidthExtension(option)),
   });
+}
+
+// Reconfigures syntax colors in place, without a fresh EditorState.
+export function setSyntaxTheme(view: EditorView, theme: string) {
+  view.dispatch({ effects: reconfigureSyntaxTheme(theme) });
 }
 
 // Switching notes must not be a transaction on the shared state — history

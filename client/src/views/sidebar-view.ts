@@ -1,13 +1,12 @@
 import type { Note } from "../notes/model";
 import type { User } from "../api/auth";
 import { escapeHtml } from "../lib/html";
+import { icon } from "../lib/icons";
 
 export type SidebarCallbacks = {
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
   onNew: () => void;
-  onImportFiles: (files: FileList) => void;
-  onExportRequest: () => void;
   onRename: (id: string, title: string) => void;
   onAuthAction: () => void;
 };
@@ -24,33 +23,24 @@ export function renderSidebar(
   callbacks: SidebarCallbacks,
 ): SidebarHandles {
   root.innerHTML = `
-    <div class="sidebar-toolbar">
-      <button type="button" data-action="new" title="New note">➕ New</button>
-      <button type="button" data-action="import" title="Import notes">📥 Import</button>
-      <button type="button" data-action="export" title="Export notes">📤 Export</button>
+    <div class="side-top">
+      <input type="search" id="note-search" class="filter" placeholder="Search notes  (Ctrl+K)" aria-label="Filter notes" />
+      <button type="button" class="add" data-action="new" title="New note (Alt+N)" aria-label="New note">${icon("plus")}</button>
     </div>
-    <input type="search" id="note-search" placeholder="🔍 Search notes" />
     <ul class="note-list" id="note-list"></ul>
-    <div class="sidebar-footer" id="sidebar-count">0 files</div>
-    <div class="sidebar-auth" id="sidebar-auth">
-      <span id="auth-status-text">👤 Not logged in</span>
-      <button type="button" id="auth-action-button">Log in</button>
+    <div class="sidebar-footer">
+      <span id="sidebar-count">0 files</span>
+      <span>F1 for keys</span>
     </div>
-    <input
-      type="file"
-      id="note-import-input"
-      accept=".md,text/markdown"
-      multiple
-      hidden
-    />
+    <div class="sidebar-auth" id="sidebar-auth">
+      <span id="auth-status-text">${icon("user")} Not logged in</span>
+      <button type="button" class="fbtn" id="auth-action-button">Log in</button>
+    </div>
   `;
 
   const list = root.querySelector<HTMLUListElement>("#note-list")!;
   const countEl = root.querySelector<HTMLElement>("#sidebar-count")!;
   const searchInput = root.querySelector<HTMLInputElement>("#note-search")!;
-  const importInput = root.querySelector<HTMLInputElement>(
-    "#note-import-input",
-  )!;
   const authStatusText = root.querySelector<HTMLElement>(
     "#auth-status-text",
   )!;
@@ -64,21 +54,6 @@ export function renderSidebar(
     .querySelector<HTMLButtonElement>('[data-action="new"]')!
     .addEventListener("click", () => callbacks.onNew());
 
-  root
-    .querySelector<HTMLButtonElement>('[data-action="import"]')!
-    .addEventListener("click", () => importInput.click());
-
-  root
-    .querySelector<HTMLButtonElement>('[data-action="export"]')!
-    .addEventListener("click", () => callbacks.onExportRequest());
-
-  importInput.addEventListener("change", () => {
-    if (importInput.files && importInput.files.length > 0) {
-      callbacks.onImportFiles(importInput.files);
-    }
-    importInput.value = "";
-  });
-
   function applyFilter() {
     const query = searchInput.value.trim().toLowerCase();
     for (const item of Array.from(list.querySelectorAll<HTMLLIElement>("li"))) {
@@ -91,7 +66,9 @@ export function renderSidebar(
 
   list.addEventListener("click", (event) => {
     const target = event.target;
-    if (!(target instanceof HTMLElement)) return;
+    // Element, not HTMLElement: a click can land on the button's inline
+    // <svg> icon, which is an SVGElement.
+    if (!(target instanceof Element)) return;
 
     const deleteButton = target.closest<HTMLElement>('[data-action="delete"]');
     if (deleteButton) {
@@ -106,7 +83,7 @@ export function renderSidebar(
 
   list.addEventListener("dblclick", (event) => {
     const target = event.target;
-    if (!(target instanceof HTMLElement)) return;
+    if (!(target instanceof Element)) return;
     if (!target.closest(".note-item")) return;
 
     const li = target.closest<HTMLLIElement>("li");
@@ -135,13 +112,10 @@ export function renderSidebar(
   }
 
   function setAuthStatus(user: User | null) {
-    if (user) {
-      authStatusText.textContent = `👤 ${user.username}`;
-      authActionButton.textContent = "Log out";
-    } else {
-      authStatusText.textContent = "👤 Not logged in";
-      authActionButton.textContent = "Log in";
-    }
+    authStatusText.innerHTML = user
+      ? `${icon("user")} ${escapeHtml(user.username)}`
+      : `${icon("user")} Not logged in`;
+    authActionButton.textContent = user ? "Log out" : "Log in";
   }
 
   return { refresh, focusSearch, renameActive, setAuthStatus };
@@ -171,7 +145,10 @@ function startRename(
     settled = true;
     const value = input.value.trim();
     if (value && value !== currentTitle) callbacks.onRename(id, value);
-    else restore();
+    // Restore either way: onRename resolves asynchronously, so this
+    // reverts to normal markup now and the later refresh() corrects the
+    // title — updateSidebarList never expects a row mid-rename.
+    restore();
   }
 
   function cancel() {
@@ -192,25 +169,54 @@ function startRename(
   input.addEventListener("blur", commit);
 }
 
+function createNoteRow(note: Note): HTMLLIElement {
+  const li = document.createElement("li");
+  li.dataset.noteId = note.id;
+  li.innerHTML = `
+    <button type="button" class="note-item"></button>
+    <button type="button" class="note-delete" data-action="delete" title="Delete note">${icon("trash")}</button>
+  `;
+  return li;
+}
+
+// Keyed reconciliation instead of a full list.innerHTML rebuild: matches
+// existing <li>s by note id and patches/moves them, so an autosave tick
+// doesn't recreate every row just to re-sort or re-title one note.
 function updateSidebarList(
   list: HTMLUListElement,
   notes: Note[],
   activeId: string | null,
 ): void {
-  list.innerHTML = notes
-    .map((note) => {
-      const title = escapeHtml(note.title);
-      return `
-        <li
-          data-note-id="${note.id}"
-          data-title="${escapeHtml(note.title.toLowerCase())}"
-          data-title-raw="${escapeHtml(note.title)}"
-          aria-current="${note.id === activeId}"
-        >
-          <button type="button" class="note-item">📄 ${title}</button>
-          <button type="button" data-action="delete" title="Delete note">🗑️</button>
-        </li>
-      `;
-    })
-    .join("");
+  const existing = new Map<string, HTMLLIElement>();
+  for (const child of Array.from(list.children)) {
+    const li = child as HTMLLIElement;
+    if (li.dataset.noteId) existing.set(li.dataset.noteId, li);
+  }
+
+  let after: HTMLLIElement | null = null;
+
+  for (const note of notes) {
+    let li = existing.get(note.id);
+    if (li) existing.delete(note.id);
+    else li = createNoteRow(note);
+
+    if (li.dataset.titleRaw !== note.title) {
+      li.dataset.title = note.title.toLowerCase();
+      li.dataset.titleRaw = note.title;
+      const titleEl = li.querySelector<HTMLElement>(".note-item");
+      if (titleEl) titleEl.textContent = note.title;
+    }
+
+    const activeAttr = String(note.id === activeId);
+    if (li.getAttribute("aria-current") !== activeAttr) {
+      li.setAttribute("aria-current", activeAttr);
+    }
+
+    // insertBefore repositions an already-in-document node in place.
+    const wantsPosition: ChildNode | null = after ? after.nextSibling : list.firstChild;
+    if (li !== wantsPosition) list.insertBefore(li, wantsPosition);
+    after = li;
+  }
+
+  for (const leftover of existing.values()) leftover.remove();
 }

@@ -1,5 +1,5 @@
 # MD.
-**A local-first Markdown workspace built for writing things down quickly and getting out of the way.**  
+**A local-first Markdown workspace built for writing things down quickly and getting out of the way.**
 Open. Write. Save. Move on.
 
 ---
@@ -65,7 +65,7 @@ Open. Write. Save. Move on.
 ### Auth
 - **Optional** — only required to sync.
 - **Username and password only** — no OAuth, no magic links.
-- **No auth library** — PBKDF2-SHA256 password hashing and opaque session tokens via the Web Crypto API (`crypto.subtle`, `crypto.getRandomValues`), stored in a `sessions` table, and httpOnly `SameSite=Lax` cookies set through Hono's built-in cookie helpers. No JWTs, no token storage in JS.
+- **No third-party auth service** — a session is just a secure, unguessable cookie; nothing is ever stored in browser JS, and there's no external identity provider to configure. See [server/README.md](server/README.md) for how sessions actually work under the hood.
 
 ### Import and export
 - **Bulk import** — pick several `.md` files at once, or drag and drop them anywhere onto the window.
@@ -79,7 +79,7 @@ Open. Write. Save. Move on.
 ---
 
 ## Shortcuts
-`Ctrl` maps to `Cmd` on macOS. Nothing uses `Ctrl` + `Alt`, since Windows sends that combination when European layouts press **AltGr**.  
+`Ctrl` maps to `Cmd` on macOS. Nothing uses `Ctrl` + `Alt`, since Windows sends that combination when European layouts press **AltGr**.
 All shortcuts are handled by a single capture-phase `keydown` listener on `document`, which calls `preventDefault()` for every handled combo before any text insertion can happen — this covers plain inputs and the rename field, not just the editor. No binding uses a browser-reserved shortcut (`Ctrl` + `T` / `N` / `W` / `Tab`), so every conflict is fully interceptable.
 
 **Platform caveats:**
@@ -130,17 +130,11 @@ All shortcuts are handled by a single capture-phase `keydown` listener on `docum
 
 ---
 
-## Tech stack
+## Project layout
 
-| Layer | Choice |
-| --- | --- |
-| Frontend | HTML / CSS / TypeScript |
-| Backend | Hono |
-| Auth | Cookie sessions — `crypto` only, no library |
-| Database | PostgreSQL + Drizzle |
+This is two independently deployable pieces, each documented on its own terms — this file stays about what the app *is and does*, not how either half is built:
 
-# TODO
-- [x]: CRON Job to remove expired session from DB.
-- [x]: Should i add API_LIMITER in /me, /ping, /logout route?? — already covered: those routes sit under `/api/v1/*`, which the global `API_LIMITER` (100/min) applies to.
+- **[`client/`](client/README.md)** — the app itself. Vite + TypeScript, no framework. Local-first: IndexedDB is the source of truth, the server is a checkpoint.
+- **[`server/`](server/README.md)** — the sync/auth/image API. Cloudflare Workers + Hono, Postgres (Neon) via Drizzle, Upstash Redis for session caching, R2 for image storage.
 
-- https://claude.ai/chat/1a7ed83b-81a1-4628-ac8f-8ec30c358e72
+Read those two for tech stack, environment setup, scripts, and deploy notes.

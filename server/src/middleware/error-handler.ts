@@ -6,17 +6,14 @@ import {
   InternalServerError,
   NotFound,
 } from "@/lib/api-error";
+import { isPostgresErrorCode } from "@/lib/postgres-error";
 import { ZodError } from "zod";
 import type { ErrorHandler, NotFoundHandler } from "hono";
 import type { AppEnv } from "@/types";
 
-const isPostgresError = (err: unknown): err is { code: string } =>
-  typeof err === "object" && err !== null && "code" in err;
-
 const normalizeError = (err: unknown): APIError => {
   if (err instanceof APIError) return err;
 
-  // Hono uses HTTPException for errors
   if (err instanceof HTTPException) {
     return new APIError({
       status: err.status || 500,
@@ -24,7 +21,6 @@ const normalizeError = (err: unknown): APIError => {
     });
   }
 
-  // Handling Zod validation errors
   if (err instanceof ZodError) {
     return new BadRequest(
       "Validation failed",
@@ -35,14 +31,15 @@ const normalizeError = (err: unknown): APIError => {
     );
   }
 
-  // c.req.json() on a malformed body
+  // c.req.json() throws a bare SyntaxError on a malformed body
   if (err instanceof SyntaxError) return new BadRequest("Malformed JSON body");
 
-  if (isPostgresError(err)) {
-    if (err.code === "23505") return new Conflict("Resource already exists");
-    if (err.code === "23503")
-      return new BadRequest("Referenced resource does not exist");
-  }
+  if (isPostgresErrorCode(err, "23505"))
+    return new Conflict("Resource already exists");
+  if (isPostgresErrorCode(err, "23503"))
+    return new BadRequest("Referenced resource does not exist");
+  if (isPostgresErrorCode(err, "23514"))
+    return new BadRequest("Request violates a data constraint");
 
   return new InternalServerError();
 };

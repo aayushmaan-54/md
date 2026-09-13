@@ -1,6 +1,7 @@
 import { login } from "../api/auth";
 import type { User } from "../api/auth";
 import { applyFormError } from "../lib/form";
+import { validateLoginPassword, validateLoginUsername } from "../lib/validators";
 
 type LoginViewProps = {
   onSuccess: (user: User) => void;
@@ -56,10 +57,27 @@ export function renderLoginView(root: HTMLElement, props: LoginViewProps) {
   const passwordInput = form.querySelector<HTMLInputElement>(
     "#login-password",
   )!;
+  const usernameError = form.querySelector<HTMLElement>(
+    '[data-field-error="username"]',
+  )!;
+  const passwordError = form.querySelector<HTMLElement>(
+    '[data-field-error="password"]',
+  )!;
+
+  function revalidate(): boolean {
+    const usernameMsg = validateLoginUsername(usernameInput.value);
+    const passwordMsg = validateLoginPassword(passwordInput.value);
+
+    usernameError.textContent = usernameMsg ?? "";
+    passwordError.textContent = passwordMsg ?? "";
+
+    return !usernameMsg && !passwordMsg;
+  }
 
   function updateSubmitState() {
-    submitButton.disabled =
-      usernameInput.value.length === 0 || passwordInput.value.length === 0;
+    const filled =
+      usernameInput.value.length > 0 && passwordInput.value.length > 0;
+    submitButton.disabled = !filled || !revalidate();
   }
 
   usernameInput.addEventListener("input", updateSubmitState);

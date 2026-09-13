@@ -21,6 +21,16 @@ export function deriveTitle(content: string, fallback = "Untitled"): string {
   return heading && heading.length > 0 ? heading : fallback;
 }
 
+// PDF export shows the title as its own heading already — strip a first
+// heading from the body when it's the exact one the title came from, so
+// it isn't printed twice. Leaves the content alone if title was manually
+// overridden to something the body doesn't actually start with.
+export function stripDerivedTitleHeading(content: string, title: string): string {
+  const match = TITLE_FROM_HEADING.exec(content);
+  if (!match || match[1].trim() !== title.trim()) return content;
+  return content.slice(0, match.index) + content.slice(match.index + match[0].length);
+}
+
 export function createNote(content = "", fallbackTitle = "Untitled"): Note {
   const now = Date.now();
   return {

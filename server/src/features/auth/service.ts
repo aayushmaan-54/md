@@ -2,6 +2,7 @@ import type { Redis } from "@upstash/redis";
 import type { Db } from "@/db";
 import { Conflict, InternalServerError, Unauthorized } from "@/lib/api-error";
 import { getSessionKey } from "@/lib/redis";
+import { isPostgresErrorCode } from "@/lib/postgres-error";
 import {
   generateRandomToken,
   generateSha256Hex,
@@ -13,12 +14,6 @@ import * as q from "./queries";
 import type { authOptions } from "./types";
 import type { LoginData, SignupData } from "./schema";
 import type { Logger } from "@/lib/logger";
-
-const isUniqueViolation = (err: unknown): err is { code: "23505" } =>
-  typeof err === "object" &&
-  err !== null &&
-  "code" in err &&
-  err.code === "23505";
 
 export async function signup(
   db: Db,
@@ -58,7 +53,7 @@ export async function signup(
       }),
     ]);
   } catch (err) {
-    if (isUniqueViolation(err)) {
+    if (isPostgresErrorCode(err, "23505")) {
       logger.warn("signup username already taken", { username: data.username });
       throw new Conflict("Username is already taken");
     }

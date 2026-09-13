@@ -10,7 +10,7 @@ type PushResult =
 
 // Each note is an independent conditional write — a batch can land as a mix
 // of ok/conflict results, unlike the old whole-blob push which was all or
-// nothing. See docs/SYNC.md.
+// nothing.
 export async function pushNotes(
   db: Db,
   items: PushNoteInput[],

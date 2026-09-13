@@ -2,9 +2,9 @@ import { z } from "zod";
 import { MAX_NOTES_PER_PUSH } from "@/config/constants";
 
 // The server never interprets a note's internal shape — it's an opaque
-// blob owned by the client. See docs/SYNC.md. Only object shapes are
-// accepted (not null/undefined/primitives) so a malformed push fails
-// validation with a 400 instead of a DB not-null violation.
+// blob owned by the client. Only object shapes are accepted (not
+// null/undefined/primitives) so a malformed push fails validation with
+// a 400 instead of a DB not-null violation.
 const noteInputSchema = z.object({
   id: z.uuid("Invalid note id"),
   data: z.record(z.string(), z.unknown()),
@@ -20,4 +20,3 @@ export const noteIdParamSchema = z.object({
 });
 
 export type PushNoteInput = z.infer<typeof noteInputSchema>;
-export type PushNotesData = z.infer<typeof pushNotesSchema>;

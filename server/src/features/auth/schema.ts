@@ -5,7 +5,6 @@ const USERNAME_MAX = 30;
 const PASSWORD_MIN = 12;
 const PASSWORD_MAX = 128;
 
-// Username Schema
 export const usernameSchema = z
   .string()
   .trim()
@@ -28,7 +27,6 @@ export const loginUsernameSchema = z
   .min(1, "Username is required")
   .max(USERNAME_MAX, "Username is too long");
 
-// Password Schema
 export const passwordSchema = z
   .string()
   .min(PASSWORD_MIN, `Password must be at least ${PASSWORD_MIN} characters`)
@@ -46,7 +44,6 @@ export const loginPasswordSchema = z
   .min(1, "Password is required")
   .max(PASSWORD_MAX, "Password is too long");
 
-// Auth Schema
 export const signupSchema = z
   .object({
     username: usernameSchema,
