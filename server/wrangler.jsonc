@@ -45,8 +45,8 @@
       ],
       "vars": {
         "ENVIRONMENT": "production",
-        "BACKEND_BASE_URL": "https://api.example.com/api/v1",
-        "FRONTEND_URL": "https://example.com",
+        "BACKEND_BASE_URL": "https://md.aayushmaansoni-dev.workers.dev/api/v1",
+        "FRONTEND_URL": "https://md.aayushmaansoni.com",
         "SESSION_TTL_SECONDS": "2592000", // 30 days
       },
       "secrets": {
