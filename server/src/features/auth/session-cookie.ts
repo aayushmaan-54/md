@@ -11,14 +11,18 @@ export const sessionTtlSeconds = (c: Context<AppEnv>) =>
 export const sessionCookieOptions = (
   c: Context<AppEnv>,
   overrides: Partial<CookieOptions> = {},
-): CookieOptions => ({
-  httpOnly: true,
-  secure: c.env.ENVIRONMENT === "production",
-  sameSite: "Lax",
-  path: "/",
-  maxAge: sessionTtlSeconds(c),
-  ...overrides,
-});
+): CookieOptions => {
+  const isProduction = c.env.ENVIRONMENT === "production";
+  return {
+    httpOnly: true,
+    secure: isProduction,
+    // cross-site cookie in prod; None requires secure, hence paired
+    sameSite: isProduction ? "None" : "Lax",
+    path: "/",
+    maxAge: sessionTtlSeconds(c),
+    ...overrides,
+  };
+};
 
 export const deleteSessionCookie = (c: Context<AppEnv>) => {
   deleteCookie(c, SESSION_COOKIE, { path: "/" });
